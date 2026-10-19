@@ -1,0 +1,64 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [enhanced]
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      # Optional: only needed for Trakt/Simkl/AniList/MAL/Premiumize login.
+      # Without these secrets the APK still builds (Simkl has a fallback).
+      - name: Write local.properties
+        env:
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          SIMKL_CLIENT_ID: ${{ secrets.SIMKL_CLIENT_ID }}
+          ANILIST_CLIENT_ID: ${{ secrets.ANILIST_CLIENT_ID }}
+          MAL_CLIENT_ID: ${{ secrets.MAL_CLIENT_ID }}
+          PREMIUMIZE_CLIENT_ID: ${{ secrets.PREMIUMIZE_CLIENT_ID }}
+        run: |
+          cat > local.properties <<PROPS
+          TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID}
+          TRAKT_REDIRECT_URI=nuvioenhanced://auth/trakt
+          SIMKL_CLIENT_ID=${SIMKL_CLIENT_ID}
+          SIMKL_REDIRECT_URI=nuvioenhanced://auth/simkl
+          SIMKL_APP_NAME=Nuvio Enhanced
+          ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID}
+          ANILIST_REDIRECT_URI=nuvioenhanced://auth/anilist
+          MAL_CLIENT_ID=${MAL_CLIENT_ID}
+          MAL_REDIRECT_URI=nuvioenhanced://auth/mal
+          PREMIUMIZE_CLIENT_ID=${PREMIUMIZE_CLIENT_ID}
+          NUVIO_UPDATE_GITHUB_OWNER=${{ github.repository_owner }}
+          NUVIO_UPDATE_GITHUB_REPO=${{ github.event.repository.name }}
+          PROPS
+
+      - name: Build debug APK
+        run: ./gradlew :androidApp:assembleFullDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: nuvio-enhanced-debug-apk
+          path: androidApp/build/outputs/apk/full/debug/*.apk
+          if-no-files-found: error
+          
